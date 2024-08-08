@@ -140,7 +140,7 @@ def generate_signatures(binary_file):
     for hash_value in csv_hashes:
         if kmp_search(file_hash, hash_value):
             print(f"Match found in CSV: {hash_value}")
-            return
+            continue
     else:
         print("No match found in CSV. Proceeding with disassembly and CFG generation.")
 

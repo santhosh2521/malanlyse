@@ -8,11 +8,14 @@ from networkx.algorithms import isomorphism
 import networkx as nx
 import capstone
 import pefile
+import pandas as pd
+
 
 # Setup paths and variables
 install_dir = f"D:\dms_daa_el\sc0pe_Base"
 db_url = "https://raw.githubusercontent.com/CYB3RMX/MalwareHashDB/main/HashDB"
 db_path = f"{install_dir}/HashDB"
+csv_path = f"HashDB.csv"
 
 # Downloading the HashDB
 def download_db():
@@ -54,13 +57,15 @@ def kmp_search(pattern, text):
             j += 1
 
         if j == len(pattern):
-            print(f"Pattern found at index {i - j}")
+            return True  # Pattern found
             j = lps[j - 1]
         elif i < len(text) and pattern[j] != text[i]:
             if j != 0:
                 j = lps[j - 1]
             else:
                 i += 1
+
+    return False  # Pattern not found
 
 def compute_lps(pattern, lps):
     length = 0
@@ -76,6 +81,7 @@ def compute_lps(pattern, lps):
             else:
                 lps[i] = 0
                 i += 1
+
 def detect_arch_and_mode(binary_data):
     try:
         pe = pefile.PE(data=binary_data)
@@ -120,23 +126,24 @@ def find_subgraph_isomorphisms(graph1, graph2):
 
 # Main function to generate signatures
 def generate_signatures(binary_file):
-    conn = sqlite3.connect(f"{db_path}")
-    cursor = conn.cursor()
+    ret =0
     file_hash = get_file_hash(binary_file)
     print(f"File MD5 Hash: {file_hash}")
+    # Load CSV data
+    csv_data = pd.read_csv(csv_path)
 
-    database_content = cursor.execute(f"SELECT * FROM HashDB").fetchall()
+    # Check if the hash is in the CSV file using KMP algorithm
+    csv_hashes = csv_data['hash'].astype(str).tolist()
 
-    print(f"Total Hashes: {len(database_content)}")
 
-    cursor.execute("SELECT * FROM HashDB WHERE hash=?", (file_hash,))
-    hash_entry = cursor.fetchone()
-
-    if hash_entry:
-        print(f"Match found in HashDB: {hash_entry}")
-        
+    print(f"Total Hashes: {len(csv_hashes)}")
+    for hash_value in csv_hashes:
+        if kmp_search(file_hash, hash_value):
+            print(f"Match found in CSV: {hash_value}")
+            continue
     else:
-        print("No match found in HashDB. Proceeding with disassembly and CFG generation.")
+        print("No match found in CSV. Proceeding with disassembly and CFG generation.")
+
 
     with open(binary_file, 'rb') as f:
         binary_data = f.read()
@@ -174,7 +181,7 @@ def generate_signatures(binary_file):
         print(f"Checking for subgraph isomorphisms with base CFG {index + 1}...")
         find_subgraph_isomorphisms(base_cfg, cfg)
     
-    conn.close()
+
     
 
 # Command-line interface setup
