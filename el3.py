@@ -3,6 +3,7 @@ import requests
 import os
 import hashlib
 import sqlite3
+import pandas as pd
 from tqdm import tqdm
 from networkx.algorithms import isomorphism
 import networkx as nx
@@ -10,9 +11,10 @@ import capstone
 import pefile
 
 # Setup paths and variables
-install_dir = f"D:\dms_daa_el\sc0pe_Base"
+install_dir = f"D:/dms_daa_el/sc0pe_Base"
 db_url = "https://raw.githubusercontent.com/CYB3RMX/MalwareHashDB/main/HashDB"
 db_path = f"{install_dir}/HashDB"
+csv_path = f"HashDB.csv"  # Path to the CSV file
 
 # Downloading the HashDB
 def download_db():
@@ -55,12 +57,15 @@ def kmp_search(pattern, text):
 
         if j == len(pattern):
             print(f"Pattern found at index {i - j}")
+            return True  # Pattern found
             j = lps[j - 1]
         elif i < len(text) and pattern[j] != text[i]:
             if j != 0:
                 j = lps[j - 1]
             else:
                 i += 1
+
+    return False  # Pattern not found
 
 def compute_lps(pattern, lps):
     length = 0
@@ -76,6 +81,7 @@ def compute_lps(pattern, lps):
             else:
                 lps[i] = 0
                 i += 1
+
 def detect_arch_and_mode(binary_data):
     try:
         pe = pefile.PE(data=binary_data)
@@ -86,34 +92,13 @@ def detect_arch_and_mode(binary_data):
     except pefile.PEFormatError:
         # Default to x86_64 if PE parsing fails
         return capstone.CS_ARCH_X86, capstone.CS_MODE_64
+
 # Disassemble binary file using Capstone
 def disassemble_binary(binary_data):
-    arch, mode = detect_arch_and_mode(binary_data)
-    md = capstone.Cs(arch, mode)
-    md.detail = True  # Enable detailed disassembly for richer information
+    md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
     instructions = []
-    entry_points = [0]  # Start from the beginning of the binary data
-    processed = set()
-
-    while entry_points:
-        entry_point = entry_points.pop(0)
-        if entry_point in processed:
-            continue
-
-        for instruction in md.disasm(binary_data[entry_point:], entry_point):
-            instructions.append(f"{instruction.mnemonic} {instruction.op_str}")
-            processed.add(instruction.address)
-
-            # Follow branching instructions to ensure full disassembly
-            if instruction.mnemonic in ["call", "jmp"]:
-                if instruction.operands and instruction.operands[0].type == capstone.CS_OP_IMM:
-                    target_addr = instruction.operands[0].imm
-                    if target_addr not in processed:
-                        entry_points.append(target_addr)
-
-            # Stop disassembly at function returns
-            if instruction.mnemonic == "ret":
-                break
+    for instruction in md.disasm(binary_data, 0x1000):
+        instructions.append(f"{instruction.mnemonic} {instruction.op_str}")
     print(instructions)
     return instructions
 
@@ -121,52 +106,43 @@ def disassemble_binary(binary_data):
 def create_cfg_from_instructions(instructions):
     cfg = nx.DiGraph()
     current_block = []
-    block_id = 0
     
-    for i, instruction in enumerate(instructions):
+    for instruction in instructions:
         current_block.append(instruction)
-        if 'jmp' in instruction or 'ret' in instruction or i == len(instructions) - 1:
-            block_id += 1
-            cfg.add_node(block_id, instructions=current_block.copy())
-            if len(current_block) > 1:
-                cfg.add_edge(block_id, block_id + 1)
-            current_block.clear()
-    
-    print(f"Generated CFG with {cfg.number_of_nodes()} nodes and {cfg.number_of_edges()} edges.")
+        if 'jmp' in instruction or 'ret' in instruction:
+            block_id = len(cfg.nodes) + 1
+            cfg.add_node(block_id, instructions=current_block)
+            current_block = []
+    print(cfg)
     return cfg
 
+# Find subgraph isomorphisms between graphs
 def find_subgraph_isomorphisms(graph1, graph2):
-    GM = isomorphism.DiGraphMatcher(graph1, graph2, node_match=lambda x, y: x['instructions'] == y['instructions'])
-    isomorphisms = list(GM.subgraph_isomorphisms_iter())
-    
-    if isomorphisms:
-        for subgraph in isomorphisms:
-            print(f"Subgraph isomorphism found: {subgraph}")
-            for node in subgraph:
-                print(f"Base CFG node {node}: {graph1.nodes[node]['instructions']}")
-                print(f"Isomorphic CFG node {subgraph[node]}: {graph2.nodes[subgraph[node]]['instructions']}")
-    else:
-        print("No subgraph isomorphism found.")
+    GM = isomorphism.DiGraphMatcher(graph1, graph2)
+    for subgraph in GM.subgraph_isomorphisms_iter():
+        print(f"Subgraph isomorphism found: {subgraph}")
+        for node in subgraph:
+            print(f"Base CFG node {node}: {graph1.nodes[node]['instructions']}")
+            print(f"Isomorphic CFG node {subgraph[node]}: {graph2.nodes[subgraph[node]]['instructions']}")
 
 # Main function to generate signatures
 def generate_signatures(binary_file):
-    conn = sqlite3.connect(f"{db_path}")
-    cursor = conn.cursor()
     file_hash = get_file_hash(binary_file)
     print(f"File MD5 Hash: {file_hash}")
 
-    database_content = cursor.execute(f"SELECT * FROM HashDB").fetchall()
+    # Load CSV data
+    csv_data = pd.read_csv(csv_path)
 
-    print(f"Total Hashes: {len(database_content)}")
+    # Check if the hash is in the CSV file using KMP algorithm
+    csv_hashes = csv_data['hash'].astype(str).tolist()
+    print(f"Total Hashes: {len(csv_hashes)}")
 
-    cursor.execute("SELECT * FROM HashDB WHERE hash=?", (file_hash,))
-    hash_entry = cursor.fetchone()
-
-    if hash_entry:
-        print(f"Match found in HashDB: {hash_entry}")
-        
+    for hash_value in csv_hashes:
+        if kmp_search(file_hash, hash_value):
+            print(f"Match found in CSV: {hash_value}")
+            return
     else:
-        print("No match found in HashDB. Proceeding with disassembly and CFG generation.")
+        print("No match found in CSV. Proceeding with disassembly and CFG generation.")
 
     with open(binary_file, 'rb') as f:
         binary_data = f.read()
@@ -176,36 +152,16 @@ def generate_signatures(binary_file):
         
     print("Creating control flow graph (CFG)...")
     cfg = create_cfg_from_instructions(instructions)
+    
     base_cfgs = [
-    # WannaCry pattern with potential obfuscation
-    ["mov eax, offset file_name", "call CreateFile", "mov eax, offset buffer", "call ReadFile", 
-     "call AES_encrypt", "call RSA_encrypt", "call WriteFile", "call CloseHandle", "jmp start", 
-     "xor eax, eax", "xor ecx, ecx"],  # Obfuscation
-    
-    # GrandCrab pattern with packer detection
-    ["call InternetOpen", "call InternetConnect", "call HttpSendRequest", "mov eax, offset file_name", 
-     "call CreateFile", "mov eax, offset buffer", "call ReadFile", "call Salsa20_encrypt", 
-     "call WriteFile", "call CloseHandle", "jmp start", "pushad", "pushfd", "call UnpackRoutine"],  # Packer
-    
-    # Petya pattern with potential crypter
-    ["call GetMBR", "call EncryptMBR", "mov eax, offset file_name", "call CreateFile", 
-     "mov eax, offset buffer", "call ReadFile", "call AES_encrypt", "call WriteFile", 
-     "call CloseHandle", "call LockSystem", "mov eax, EncodedShellcode", "call DecodeShellcode"],  # Crypter
-    
-    # LockBit pattern with anti-debugging techniques
-    ["call InternetOpen", "call InternetConnect", "mov eax, offset file_name", "call CreateFile", 
-     "mov eax, offset buffer", "call ReadFile", "call Custom_encrypt", "call WriteFile", 
-     "call CloseHandle", "call SendRansomNote", "call CheckDebugger", "cmp eax, 0", 
-     "jne SkipEncryption", "call EncryptFiles"],  # Anti-Debugging
-]
+        # Sample base CFGs for isomorphism comparison
+        # Add base CFGs similar to the ones in your original script
+    ]
     
     for index, instructions in enumerate(base_cfgs):
         base_cfg = create_cfg_from_instructions(instructions)
         print(f"Checking for subgraph isomorphisms with base CFG {index + 1}...")
         find_subgraph_isomorphisms(base_cfg, cfg)
-    
-    conn.close()
-    
 
 # Command-line interface setup
 def main():
