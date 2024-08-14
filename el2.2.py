@@ -192,12 +192,12 @@ def generate_signatures(binary_file, json_file_path):
     spinner.stop()
 
     ghidra_headless_command = [
-    'D:\\ghidra_11.0.1_PUBLIC\\support\\analyzeHeadless.bat',
-    'D:\\ghidra_projects',
-    'ransom2',
+    '<path to your ghidra headless batch file>',
+    '<path to your ghidra project>',
+    '<project name>',
     '-import', f"{binary_file}",
-    '-scriptPath', 'C:\\Users\\LENOVO\\ghidra_scripts',
-    '-postScript', 'NewScript.py'
+    '-scriptPath', '<path to your script>',
+    '-postScript', '<script_name>'
     ]
     spinner.white.bold.shark.on_blue.start()
     subprocess.run(ghidra_headless_command)

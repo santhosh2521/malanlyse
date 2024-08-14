@@ -82,7 +82,7 @@ while vertices.hasNext():
     print("  Vertex: {} (key: {})".format(vertex, vertex.key()))
 
 # Save the graph to a JSON file
-output_path = "D:\\dms_daa_el\\ransomware_graph.json"
+output_path = "<output_path>"
 try:
     json_data = json.dumps(graph_dict, indent=4)  # Convert the dictionary to a JSON string with indentation
     writer = FileWriter(output_path)
