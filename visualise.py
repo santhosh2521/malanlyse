@@ -3,7 +3,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 # Load the graph from the JSON file
-input_path = "D:\\dms_daa_el\\ransomware_graph.json"
+input_path = "ransomware_graph.json"
 with open(input_path, 'r') as f:
     graph_data = json.load(f)
 

@@ -8,12 +8,15 @@ import pandas as pd
 import json
 from tqdm import tqdm
 from networkx.algorithms import isomorphism
-
+import subprocess
+from yaspin import yaspin
 # Setup paths and variables
+ 
 install_dir = f"D:/dms_daa_el/sc0pe_Base"
 db_url = "https://raw.githubusercontent.com/CYB3RMX/MalwareHashDB/main/HashDB"
 db_path = f"{install_dir}/HashDB"
 csv_path = f"HashDB.csv"
+spinner = yaspin()
 
 # Downloading the HashDB
 def download_db():
@@ -107,6 +110,7 @@ def get_base_ransomware_patterns():
         ("set","StartServiceA"),
         ("set","LoadResource"),
         ("set","LockResource"),
+        ("set","WNetAddConnection2A")
     ])
     base_patterns.append(("WannaCry1", wannacry_pattern))
     
@@ -115,14 +119,31 @@ def get_base_ransomware_patterns():
     grandcrab_pattern.add_edges_from([
         ("set", "InternetOpenA"),
         ("set", "InternetConnectA"),
-        ("set", "HttpSendRequestA"),
-        ("set", "InternetConnectA"),
-        ("set", "HttpSendRequestA"),
+        ("set", "WriteFile"),
+        ("set", "CloseHandle"),
+        ("set","RegCreateKeyW"),
         ("set","InitializeCriticalSectionAndSpinCount"),
         ("set","LeaveCriticalSection"),
         ("set","EnterCriticalSection"),
+        ("set","FlushFileBuffers"),
+        ("set","VirtualLock"),
+        ("set","IsDebuggerPresent")
     ])
-    base_patterns.append(("GrandCrab", grandcrab_pattern))
+    base_patterns.append(("GrandCab", grandcrab_pattern))
+
+    TeslaCrypt_pattern = nx.DiGraph()
+    TeslaCrypt_pattern.add_edges_from([
+        ("set","InitializeCriticalSection"),
+        ("set","EnterCriticalSection"),
+        ("set", "WriteFile"),
+        ("set", "CloseHandle"),
+        ("set","VirtualQuery"),
+        ("set","VirtualProtect"),
+        ("set","DeleteObject"),
+        ("set","DispatchMessageA"), #splash screen
+        ("set","ShowWindow") #splash screen
+    ])
+    base_patterns.append(("Teslacrypt", TeslaCrypt_pattern))
     
     # Add more patterns as needed
     return base_patterns
@@ -136,19 +157,14 @@ def find_subgraph_isomorphisms(base_patterns, target_graph):
         
         # Check if there's at least one common node
         common_nodes = target_nodes.intersection(base_nodes)
-        if len(common_nodes) < 6:
+        if len(common_nodes) < 5:
             print(f"No common nodes found between {pattern_name} pattern and target graph or too few common nodes to be isomorphic. Skipping...")
             continue
         
         print(f"Checking for {pattern_name} pattern with common nodes: {common_nodes}...")
         GM = isomorphism.DiGraphMatcher(target_graph, base_graph)
-        
         if GM.subgraph_is_isomorphic():
             print(f"Isomorphic subgraph found for {pattern_name}!")
-            # print(base_graph)
-            # with open('subgraph_isomorphisms.txt', 'w') as file:
-            #     for subgraph in GM.subgraph_isomorphisms_iter():
-            #         file.write(f"Subgraph: {subgraph}\n")
         else:
             print(f"No isomorphic subgraph found for {pattern_name}.")
 
@@ -163,14 +179,29 @@ def generate_signatures(binary_file, json_file_path):
     # Check if the hash is in the CSV file using KMP algorithm
     csv_hashes = csv_data['hash'].astype(str).tolist()
     print(f"Total Hashes: {len(csv_hashes)}")
-
+    spinner.white.bold.shark.on_blue.start()
+    flag = 0
+    print("\n")
     for _, row in csv_data.iterrows():
         if kmp_search(file_hash, row['hash']):
             print(f"Match found in CSV: {row['hash']} corresponds to {row['name']}")
+            flag = 1
+            spinner.stop()
             continue
-    else:
+    if flag!=1:
         print("No match found in CSV. Proceeding with CFG analysis.")
+        spinner.stop()
 
+    ghidra_headless_command = [
+    'D:\\ghidra_11.0.1_PUBLIC\\support\\analyzeHeadless.bat',
+    'D:\\ghidra_projects',
+    'ransom2',
+    '-import', f"{binary_file}",
+    '-scriptPath', 'C:\\Users\\LENOVO\\ghidra_scripts',
+    '-postScript', 'NewScript.py'
+    ]
+
+    subprocess.run(ghidra_headless_command)
     # Load the target graph from the JSON file
     target_graph = load_ransomware_graph(json_file_path)
     
@@ -186,8 +217,10 @@ def main():
     parser.add_argument('file', help="Path to the binary file.")
     parser.add_argument('json_file', help="Path to the JSON file containing the ransomware graph.")
     args = parser.parse_args()
+
     
     generate_signatures(args.file, args.json_file)
 
 if __name__ == "__main__":
     main()
+
