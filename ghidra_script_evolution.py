@@ -478,7 +478,8 @@
 #     "LockResource","SizeofResource","OpenMutexA","GetModuleHandleA","VirtualProtect","CloseHandle","PulseEvent",
 #     "WriteFileGather","FlushFileBuffers","VirtualLock","IsDebuggerPresent",
 #     "FlushViewOfFile","EncryptFileW","GetSecurityDescriptorDacl","VirtualQuery","InterlockedExchange","DeleteObject","DispatchMessageA",
-#     "ShowWindow","GetUserNameExA","GetUserDefaultLCID"
+#     "ShowWindow","GetUserNameExA","OpenClipboard","OutputDebugStringA",
+#     "GetPrivateProfileString","EmptyClipboard","PathRemoveExtensionW","WaitForDebugEvent"
 # ]
 
 # def getAddress(offset):
