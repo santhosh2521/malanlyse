@@ -1,4 +1,4 @@
-# Malware Binary Analysis CLI Tool
+# MALANLYSE
 
 Topic : Automatic generation of string signatures for malware detection
 
