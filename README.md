@@ -27,11 +27,12 @@ This CLI tool automates the process of analyzing malware binary files. It allows
 1. Clone the repository:
     ```bash
     git clone https://github.com/santhosh2521/malanlyse.git
-
+    ```
+    ```bash
     cd malanlyse
     ```
 
-2. Install the required Python packages:
+2. Install the required Python packages
    
 
 ## Usage
@@ -44,7 +45,7 @@ python <script-name>.py <path-to-binary-file> <path-to-json-file>
 Example:
 
 ```bash
-python malware_analysis.py sample_binary.exe ransomware_graph.json
+python el2.2.py sample_binary.exe ransomware_graph.json
 ```
 
 This command will:
