@@ -16,7 +16,6 @@ install_dir = f"D:\dms_daa_el\sc0pe_Base"
 db_url = "https://raw.githubusercontent.com/CYB3RMX/MalwareHashDB/main/HashDB"
 db_path = f"{install_dir}/HashDB"
 csv_path = f"HashDB.csv"
-
 # Downloading the HashDB
 def download_db():
     os.makedirs(install_dir, exist_ok=True)
